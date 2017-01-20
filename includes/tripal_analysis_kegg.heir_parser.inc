@@ -20,7 +20,7 @@ function tripal_analysis_kegg_parseHierFile($analysis_id, $hierfile, $base_path,
       // generate a unique directory name for extracting and parsing the file
       $data_dir = sys_get_temp_dir() . "/" . uniqid();
       mkdir($data_dir);
-      $stderr = shell_exec('cd  ' . escapeshellarg($data_dir) . '; tar -zxf ' . escapeshellarg($hierfile));
+      $stderr = shell_exec("cd $data_dir; tar -zxf $hierfile;");
       if ($stderr) {
         watchdog('trp_kegg',"ERROR: %err", array('%err' => $stderr), 'error');
         exit;
@@ -30,7 +30,7 @@ function tripal_analysis_kegg_parseHierFile($analysis_id, $hierfile, $base_path,
       $dhandle = @opendir($data_dir);
       while ($dir = readdir($dhandle)) {
         if (strcmp($dir, '.')==0 or strcmp($dir, '..')==0) {
-          continue;
+           return;
         }
         $hierdir = $data_dir . "/$dir";
       }
@@ -130,7 +130,7 @@ function tripal_analysis_kegg_parseHierFile($analysis_id, $hierfile, $base_path,
   
     // If user input a file, remove decompressed files after parsing
     if (is_file($hierfile)) {
-      $stderr = shell_exec('rm -r ' . escapeshellarg($data_dir));
+      $stderr = shell_exec("rm -r $data_dir;");
       if($stderr) {
         watchdog('trp_kegg', "ERROR: %err", array('%err' => $stderr), 'error');
       }
@@ -198,11 +198,15 @@ function tripal_analysis_kegg_parse_kegg_file($file, &$hierarchy, $analysis_id, 
     // heirarchies begin with a ko
     if (preg_match("/#.*nbsp;\s(.*)<\/h2>$/", $line, $matches)) {
       $hierarchy = $matches[1];
+//Sofia
+print "\nheirarchy: $hierarchy *\n";
     }
     // KEGG BRITE heirarchy terms have a prefix of 'ko' and are found in the
     // header portion of each file.
     if (preg_match("/#ENTRY\s+(ko.*)$/", $line, $matches)) {
       $hierarchy_id = $matches[1];
+//Sofia
+print "\n\tHierarchy_id: $hierarchy_id *\n";
     }
     // once we have the term ID and name we can parse the rest of the file
     if ($hierarchy and $hierarchy_id) {
@@ -229,7 +233,10 @@ function tripal_analysis_kegg_parse_kegg_file($file, &$hierarchy, $analysis_id, 
           array('%heirarchy', $hierarchy), 'error');        
         return;
       }
-
+//Sofia
+if ($cvterm){
+  print "tripal_insert_cvterm $hierarchy_id $hierarchy worked\n";
+}
       // now that we have the file type we can recurse
       $next = tripal_analysis_kegg_get_next_line($handle, $filepos, $filesize, 
         $intv_read, $no_file, $total_files, $filename);
@@ -308,7 +315,8 @@ function tripal_analysis_kegg_recurse_heir($handle, $line, $query_re,
     }
     $prevpos = $filepos;
   }
-
+//Sofia 
+print "recurse: $results\n";
   return $results;
 }
 /**
@@ -336,17 +344,22 @@ function tripal_analysis_kegg_get_next_line($handle, &$filepos, $filesize, &$int
     preg_match("/^([ABCDEFGHIJKLMNOP])\s*(.*)/", $line, $matches);
     $level = $matches[1];
     $value = $matches[2];
-
+//Sofia
+print "level:$level value:$value\n";
     // skip lines that aren't data or are empty
     if ($level and $value) {
 
       // check to see if this is a line identifying a KEGG pathway
-      //print "$value\n";
-      if (preg_match("/^(\d+)\s+(.*?)\s+\[PATH:.*>(.*)<\/a>]$/", $value, $pathmatch) > 0) {
+//Sofia
+//print "\ntripal_analysis_kegg_get_next_line: $value\n";
+      //if (preg_match("/^(\d+)\s+(.*?)\s+\[PATH:.*>(.*)<\/a>]$/", $value, $pathmatch) > 0) {
+//Sofia Changed pattern match to have closing anchor as optional, > optional as well
+      if (preg_match("/^(\d+)\s+(.*?)\s+\[PATH:.*(ko\d{5}).*]$/", $value, $pathmatch) > 0) {
         $pathway['id'] = $pathmatch[3];
         $pathway['name'] = $pathmatch[2];
         $pathway['def'] = $pathmatch[2];
-
+//Sofia
+print "FOUND PATH: 3:$pathmatch[3] 2:$pathmatch[2] 2:$pathmatch[2]\n";
         // add the pathway as a cvterm
         $pathway_term = array(
           'id' => $pathway['id'],
@@ -367,7 +380,10 @@ function tripal_analysis_kegg_get_next_line($handle, &$filepos, $filesize, &$int
           $pathway['type_id'] = $pathway_id;
         }
       }
-
+//Sofia
+if ($cvterm){
+ print "tripal_insert_cvterm ($pathway_term)\n";
+}
       // change all relative paths to absolute paths pointing to KEGG (www.genome.jp)
       // add id to <a> tags so we can link kegg.gif to it in tripal_analysis_kegg.css
       $value = preg_replace("/<a href=\"\//i", "<a href=\"http://www.genome.jp/", $value);
@@ -395,13 +411,18 @@ function tripal_analysis_kegg_get_next_line($handle, &$filepos, $filesize, &$int
 function tripal_analysis_kegg_check_line_handle_feature($query_re,
     $query_type, $query_uniquename, $base_path, $analysis_id, $organism_id,
     $hierarchy, $value, $pathway) {
-
+//Sofia
+print "tripal_analysis_kegg_check_line_handle_feature: ($query_re,$query_type, $query_uniquename, $base_path, $analysis_id, $organism_id,$hierarchy, $value, $pathway),";
   // extract the features that have been mapped to the KEGG IDs
-  if (preg_match("/^(.*?);\s*(\<a.+)/", $value, $matches)) {
+  //if (preg_match("/^(.*?);\s*(\<a.+)/", $value, $matches)) {
+//Sofia Remove html and requiring 2 ; 
+  if (preg_match("/^(\S+);\s*((K|M).+)$/", $value, $matches)) {
     $has_feature = 1;
     $fname = $matches[1];
     $keggterm = $matches[2];
 
+//Sofia
+print "info0: $fname - $keggterm \n";
     // get the KEGG ortholog and add it as a term
     $ko_type_id = '';
     $ko_def = '';
@@ -409,10 +430,14 @@ function tripal_analysis_kegg_check_line_handle_feature($query_re,
     $ko_cvname = '';
     $ko_dbname = '';
 
-    if (preg_match("/^<a.*>(K.*?)<\/a>\s+(.*)$/", $keggterm, $matchparts)) {
+    //if (preg_match("/^<a.*>(K.*?)<\/a>\s+(.*)$/", $keggterm, $matchparts)) {
+    //Sofia removed html
+    if (preg_match("/^(K.*?)\s+(.*)$/", $keggterm, $matchparts)) {
       $ko_id = $matchparts[1];
       $ko_def = $matchparts[2];
       $ko_name = $ko_def;
+//Sofia
+print "info1: $ko_id - $ko_def - $ko_name\n";
       $ko_cvname = 'KEGG_ORTHOLOGY';
       $ko_dbname = 'KEGG_ORTHOLOGY';
       $ko_term = array(
@@ -435,10 +460,14 @@ function tripal_analysis_kegg_check_line_handle_feature($query_re,
         $ko_type_id = $cvterm->cvterm_id;
       }
     }
-    if (preg_match("/^<a.*>(M.*?)<\/a>\s+(.*)$/", $keggterm, $matchparts)) {
+    //if (preg_match("/^<a.*>(M.*?)<\/a>\s+(.*)$/", $keggterm, $matchparts)) {
+//Sofia remove html
+    if (preg_match("/^(M.*?)\s+(.*)$/", $keggterm, $matchparts)) {
       $ko_id = $matchparts[1];
       $ko_def = $matchparts[2];
       $ko_name = $ko_def;
+//Sofia
+print "info: $ko_id - $ko_def - $ko_name\n";
       $ko_cvname = 'KEGG_MODULE';
       $ko_dbname = 'KEGG_MODULE';
       $ko_term = array(
@@ -512,7 +541,8 @@ function tripal_analysis_kegg_check_line_handle_feature($query_re,
 
     // if we match with a feature then add in all the properties.
     if ($feature_id) {
-       
+//Sofia
+print "feature_id: $feature_id\n";       
       // add the analysisfeature record if it doesn't already exist.
       $columns = array('analysisfeature_id');
       $values = array(
@@ -521,8 +551,13 @@ function tripal_analysis_kegg_check_line_handle_feature($query_re,
       );
       $options = array('statement_name' => 'sel_analysisfeature_fean');
       $analysisfeature_arr = chado_select_record('analysisfeature', $columns, $values, $options);
+//Sofia
+print "analysisfeature_arr $analysisfeature_arr\n"; 
+print "chado_select_record('analysisfeature', $columns, $values, $options)\n";      
       if (count($analysisfeature_arr) == 0) {
         if (chado_insert_record('analysisfeature', $values)) {
+//Sofia
+print "\n chado_insert_record $values\n";
           $options = array('statement_name' => 'ins_analysisfeature_fean');
           $analysisfeature_arr = chado_select_record('analysisfeature',
               array('analysisfeature_id'), $values, $options);
@@ -559,7 +594,7 @@ function tripal_analysis_kegg_check_line_handle_feature($query_re,
         if (!$success) {
           watchdog('tpr_kegg', "Failed: Cannot add cvterm: %name '%value'",
           array('%name' => $cvterm->name, '%value' =>  $cvterm->def), WATCHDOG_ERROR);
-          return;
+             return;
         }
       }
 
@@ -588,7 +623,7 @@ function tripal_analysis_kegg_check_line_handle_feature($query_re,
           if (!$success) {
             watchdog('tpr_kegg', "Failed: Cannot add cvterm: %name '%value'",
             array('%name' => $cvterm->name, '%value' =>  $cvterm->def), WATCHDOG_ERROR);
-            return;
+            continue;
           }
         }
       }
