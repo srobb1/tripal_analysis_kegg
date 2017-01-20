@@ -30,7 +30,7 @@ function tripal_analysis_kegg_parseHierFile($analysis_id, $hierfile, $base_path,
       $dhandle = @opendir($data_dir);
       while ($dir = readdir($dhandle)) {
         if (strcmp($dir, '.')==0 or strcmp($dir, '..')==0) {
-           return;
+          continue;
         }
         $hierdir = $data_dir . "/$dir";
       }
@@ -594,7 +594,7 @@ print "\n chado_insert_record $values\n";
         if (!$success) {
           watchdog('tpr_kegg', "Failed: Cannot add cvterm: %name '%value'",
           array('%name' => $cvterm->name, '%value' =>  $cvterm->def), WATCHDOG_ERROR);
-             return;
+          return;
         }
       }
 
@@ -623,7 +623,7 @@ print "\n chado_insert_record $values\n";
           if (!$success) {
             watchdog('tpr_kegg', "Failed: Cannot add cvterm: %name '%value'",
             array('%name' => $cvterm->name, '%value' =>  $cvterm->def), WATCHDOG_ERROR);
-            continue;
+            return;
           }
         }
       }
